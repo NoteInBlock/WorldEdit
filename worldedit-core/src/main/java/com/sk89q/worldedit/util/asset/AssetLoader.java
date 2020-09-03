@@ -17,49 +17,39 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package com.sk89q.worldedit.util.assets;
+package com.sk89q.worldedit.util.asset;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.util.io.file.FilenameException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
-/**
- * Abstract manager to lazy-load and temporarily cache custom assets.
- *
- * @param <T> type the be loaded
- */
-public abstract class AssetManager<T> {
+public abstract class AssetLoader<T> {
 
-    protected final Logger logger = LoggerFactory.getLogger(getClass());
-    private final Cache<String, T> assets = CacheBuilder.newBuilder().expireAfterAccess(5, TimeUnit.MINUTES).build();
+    private final Cache<String, T> assets = CacheBuilder.newBuilder()
+        .expireAfterAccess(5, TimeUnit.MINUTES)
+        .build();
+
     private final WorldEdit worldEdit;
-    private final String[] assetExtensions;
-    private final String defaultExtension;
-    private final String assetDirectoryName;
+    private final Path assetDir;
 
-    /**
-     * Creates a new AssetManager to load and cache custom assets.
-     *
-     * @param worldEdit          worldedit instance
-     * @param assetDirectoryName subdirectory of the platform's WorldEdit dir
-     * @param defaultExtension   standard file extension associated with the asset
-     * @param assetExtensions    all possible file extentions associated with the asset
-     */
-    protected AssetManager(WorldEdit worldEdit, String assetDirectoryName, String defaultExtension, String... assetExtensions) {
+    public AssetLoader(WorldEdit worldEdit, Path assetDir) {
         this.worldEdit = worldEdit;
-        this.assetDirectoryName = assetDirectoryName;
-        this.defaultExtension = defaultExtension;
-        this.assetExtensions = assetExtensions;
+        this.assetDir = assetDir;
+
+        try {
+            Files.createDirectories(assetDir);
+        } catch (IOException ignored) {
+        }
     }
 
     /**
@@ -80,31 +70,48 @@ public abstract class AssetManager<T> {
             return cached;
         }
 
-        File assetsDir = new File(worldEdit.getPlatformManager().getConfiguration().getWorkingDirectory(), assetDirectoryName);
-        if (!assetsDir.exists() || !assetsDir.isDirectory()) {
+        if (!Files.exists(this.assetDir) || !Files.isDirectory(this.assetDir)) {
             return null;
         }
 
-        File file;
+        String[] extensions = this.getAllowedExtensions().toArray(new String[0]);
+
+        Path file;
         try {
-            file = worldEdit.getSafeOpenFile(null, assetsDir, path, defaultExtension, assetExtensions);
+            file = worldEdit.getSafeOpenFile(
+                null,
+                this.assetDir.toFile(),
+                path,
+                extensions[0],
+                extensions
+            ).toPath();
         } catch (FilenameException e) {
             return null;
         }
 
-        T asset = null;
+        T asset;
         try {
-            asset = loadAssetFromFile(file);
+            asset = loadAssetFromPath(file);
+            if (asset == null) {
+                return null;
+            }
         } catch (Exception e) {
-            logger.error("Error reading file from brushes directory", e);
-        }
-        if (asset == null) {
+            WorldEdit.logger.error("Error reading asset file directory", e);
             return null;
         }
 
         assets.put(assetName, asset);
         return asset;
     }
+
+    /**
+     * Loads an asset from the given file if possible.
+     *
+     * @param path The file to load
+     * @return loaded asset, or null otherwise
+     */
+    @Nullable
+    protected abstract T loadAssetFromPath(Path path) throws Exception;
 
     /**
      * Returns an immutable set of asset keys.
@@ -116,12 +123,9 @@ public abstract class AssetManager<T> {
     }
 
     /**
-     * Loads an asset from the given file if possible.
+     * The extensions that this asset loader supports.
      *
-     * @param file file to load
-     * @return loaded asset, or null otherwise
+     * @return The supported extensions
      */
-    @Nullable
-    protected abstract T loadAssetFromFile(File file) throws Exception;
-
+    public abstract Set<String> getAllowedExtensions();
 }

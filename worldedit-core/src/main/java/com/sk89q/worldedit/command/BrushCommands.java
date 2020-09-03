@@ -33,7 +33,7 @@ import com.sk89q.worldedit.command.tool.brush.CylinderBrush;
 import com.sk89q.worldedit.command.tool.brush.GravityBrush;
 import com.sk89q.worldedit.command.tool.brush.HollowCylinderBrush;
 import com.sk89q.worldedit.command.tool.brush.HollowSphereBrush;
-import com.sk89q.worldedit.command.tool.brush.ImageBrush;
+import com.sk89q.worldedit.command.tool.brush.ImageHeightmapBrush;
 import com.sk89q.worldedit.command.tool.brush.OperationFactoryBrush;
 import com.sk89q.worldedit.command.tool.brush.SmoothBrush;
 import com.sk89q.worldedit.command.tool.brush.SphereBrush;
@@ -63,6 +63,8 @@ import com.sk89q.worldedit.session.ClipboardHolder;
 import com.sk89q.worldedit.session.request.RequestExtent;
 import com.sk89q.worldedit.util.HandSide;
 import com.sk89q.worldedit.util.TreeGenerator;
+import com.sk89q.worldedit.util.asset.AssetLoader;
+import com.sk89q.worldedit.util.asset.holder.ImageHeightmap;
 import com.sk89q.worldedit.util.formatting.text.Component;
 import com.sk89q.worldedit.util.formatting.text.TextComponent;
 import com.sk89q.worldedit.util.formatting.text.TranslatableComponent;
@@ -75,7 +77,7 @@ import org.enginehub.piston.annotation.param.Arg;
 import org.enginehub.piston.annotation.param.ArgFlag;
 import org.enginehub.piston.annotation.param.Switch;
 
-import java.awt.image.BufferedImage;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
@@ -351,35 +353,38 @@ public class BrushCommands {
                                boolean flatten,
                            @Switch(name = 'r', desc = "Randomizes the brushe's height slightly.")
                                boolean randomize) throws WorldEditException {
-        BufferedImage image = worldEdit.getImageManager().getAsset(imageName);
-        if (image == null) {
-            AsyncCommandBuilder.wrap((Callable<Component>) () -> {
-                Set<String> imageNames = worldEdit.getImageManager().getCachedAssetKeys();
-                TextComponent.Builder builder = TextComponent.builder();
-                int i = 0;
-                for (String name : imageNames) {
-                    builder.append(TextComponent.of(name, i % 2 == 0 ? TextColor.GRAY : TextColor.WHITE));
-                    if (i <= imageNames.size()) {
-                        builder.append(TextComponent.of(", "));
+        Optional<AssetLoader<ImageHeightmap>> loader = worldEdit.getAssetLoaders().getAssetLoader(ImageHeightmap.class, imageName);
+        if (loader.isPresent()) {
+            ImageHeightmap heightmap = loader.get().getAsset(imageName);
+            if (heightmap == null) {
+                AsyncCommandBuilder.wrap((Callable<Component>) () -> {
+                    Set<String> imageNames = loader.get().getCachedAssetKeys();
+                    TextComponent.Builder builder = TextComponent.builder();
+                    int i = 0;
+                    for (String name : imageNames) {
+                        builder.append(TextComponent.of(name, i % 2 == 0 ? TextColor.GRAY : TextColor.WHITE));
+                        if (i <= imageNames.size()) {
+                            builder.append(TextComponent.of(", "));
+                        }
+                        i++;
                     }
-                    i++;
-                }
-                return TranslatableComponent.of("worldedit.brush.image.unknown", TextComponent.of(imageName), builder.build());
-            }, player)
+                    return TranslatableComponent.of("worldedit.brush.image.unknown", TextComponent.of(imageName), builder.build());
+                }, player)
                     .registerWithSupervisor(worldEdit.getSupervisor(), "Image brush list.")
                     .onSuccess((Component) null, player::print)
                     .onFailure((Component) null, worldEdit.getPlatformManager().getPlatformCommandManager().getExceptionConverter())
                     .buildAndExec(worldEdit.getExecutorService());
-            return;
+                return;
+            }
+
+            worldEdit.checkMaxBrushRadius(radius);
+
+            BrushTool tool = session.getBrushTool(player.getItemInHand(HandSide.MAIN_HAND).getType());
+            tool.setSize(radius);
+            tool.setBrush(new ImageHeightmapBrush(heightmap, intensity, erase, flatten, randomize), "worldedit.brush.image");
+
+            player.printInfo(TranslatableComponent.of("worldedit.brush.image.equip", TextComponent.of((int) radius)));
         }
-
-        worldEdit.checkMaxBrushRadius(radius);
-
-        BrushTool tool = session.getBrushTool(player.getItemInHand(HandSide.MAIN_HAND).getType());
-        tool.setSize(radius);
-        tool.setBrush(new ImageBrush(image, intensity, erase, flatten, randomize), "worldedit.brush.image");
-
-        player.printInfo(TranslatableComponent.of("worldedit.brush.image.equip", TextComponent.of((int) radius)));
     }
 
     @Command(

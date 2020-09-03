@@ -23,24 +23,22 @@ import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.MaxChangedBlocksException;
 import com.sk89q.worldedit.function.pattern.Pattern;
 import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.util.asset.holder.ImageHeightmap;
 import com.sk89q.worldedit.world.block.BaseBlock;
 import com.sk89q.worldedit.world.block.BlockTypes;
 
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
-public class ImageBrush implements Brush {
+public class ImageHeightmapBrush implements Brush {
 
-    private static final Random RANDOM = new Random();
-    private final BufferedImage image;
+    private final ImageHeightmap heightmap;
     private final double intensity;
     private final boolean erase;
     private final boolean flatten;
     private final boolean randomize;
 
-    public ImageBrush(BufferedImage image, double intensity, boolean erase, boolean flatten, boolean randomize) {
-        this.image = image;
+    public ImageHeightmapBrush(ImageHeightmap heightmap, double intensity, boolean erase, boolean flatten, boolean randomize) {
+        this.heightmap = heightmap;
         this.intensity = intensity;
         this.erase = erase;
         this.flatten = flatten;
@@ -51,17 +49,8 @@ public class ImageBrush implements Brush {
     public void build(EditSession editSession, BlockVector3 position, Pattern pattern, double doubleSize) throws MaxChangedBlocksException {
         // Resize the image
         int size = (int) Math.ceil(doubleSize);
-        int diameter = size * 2 + 1;
-        BufferedImage resizedPattern = new BufferedImage(diameter, diameter, 1);
-        Graphics2D graphic = null;
-        try {
-            graphic = resizedPattern.createGraphics();
-            graphic.drawImage(this.image, 0, 0, diameter, diameter, null);
-        } finally {
-            graphic.dispose();
-        }
 
-        double random = randomize ? RANDOM.nextDouble() : 0;
+        double random = randomize ? ThreadLocalRandom.current().nextDouble() : 0;
         for (int offX = -size; offX <= size; offX++) {
             for (int offZ = -size; offZ <= size; offZ++) {
                 int posX = position.getX() + offX;
@@ -72,7 +61,7 @@ public class ImageBrush implements Brush {
                     continue;
                 }
 
-                double height = getHeightAt(resizedPattern, offX + size, resizedPattern.getHeight() - 1 - (offZ + size));
+                double height = heightmap.getHeightAt(offX + size, offZ + size, size, intensity);
                 // Add a bit of variation
                 if (randomize && random > 1 - height % 1) {
                     height += 1;
@@ -93,20 +82,4 @@ public class ImageBrush implements Brush {
             }
         }
     }
-
-    private double getHeightAt(BufferedImage image, int x, int y) {
-        int rgb = image.getRGB(x, y);
-        if (rgb == 0) {
-            return 0;
-        }
-
-        int red = rgb >>> 16 & 0xFF;
-        int green = rgb >>> 8 & 0xFF;
-        int blue = rgb & 0xFF;
-
-        double scale = (red + blue + green) / 3D / 255D;
-        return scale * intensity;
-    }
-
 }
-
