@@ -19,6 +19,7 @@
 
 package com.sk89q.worldedit.command;
 
+import com.google.common.io.MoreFiles;
 import com.sk89q.worldedit.LocalConfiguration;
 import com.sk89q.worldedit.LocalSession;
 import com.sk89q.worldedit.WorldEdit;
@@ -77,8 +78,9 @@ import org.enginehub.piston.annotation.param.Arg;
 import org.enginehub.piston.annotation.param.ArgFlag;
 import org.enginehub.piston.annotation.param.Switch;
 
+import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Callable;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -351,39 +353,43 @@ public class BrushCommands {
                                boolean erase,
                            @Switch(name = 'f', desc = "Don't change blocks above the selected height")
                                boolean flatten,
-                           @Switch(name = 'r', desc = "Randomizes the brushe's height slightly.")
+                           @Switch(name = 'r', desc = "Randomizes the brush's height slightly.")
                                boolean randomize) throws WorldEditException {
         Optional<AssetLoader<ImageHeightmap>> loader = worldEdit.getAssetLoaders().getAssetLoader(ImageHeightmap.class, imageName);
+
         if (loader.isPresent()) {
-            ImageHeightmap heightmap = loader.get().getAsset(imageName);
-            if (heightmap == null) {
-                AsyncCommandBuilder.wrap((Callable<Component>) () -> {
-                    Set<String> imageNames = loader.get().getCachedAssetKeys();
-                    TextComponent.Builder builder = TextComponent.builder();
-                    int i = 0;
-                    for (String name : imageNames) {
-                        builder.append(TextComponent.of(name, i % 2 == 0 ? TextColor.GRAY : TextColor.WHITE));
-                        if (i <= imageNames.size()) {
-                            builder.append(TextComponent.of(", "));
-                        }
-                        i++;
-                    }
-                    return TranslatableComponent.of("worldedit.brush.image.unknown", TextComponent.of(imageName), builder.build());
-                }, player)
-                    .registerWithSupervisor(worldEdit.getSupervisor(), "Image brush list.")
-                    .onSuccess((Component) null, player::print)
-                    .onFailure((Component) null, worldEdit.getPlatformManager().getPlatformCommandManager().getExceptionConverter())
-                    .buildAndExec(worldEdit.getExecutorService());
-                return;
-            }
-
             worldEdit.checkMaxBrushRadius(radius);
-
             BrushTool tool = session.getBrushTool(player.getItemInHand(HandSide.MAIN_HAND).getType());
-            tool.setSize(radius);
-            tool.setBrush(new ImageHeightmapBrush(heightmap, intensity, erase, flatten, randomize), "worldedit.brush.image");
 
-            player.printInfo(TranslatableComponent.of("worldedit.brush.image.equip", TextComponent.of((int) radius)));
+            ImageHeightmapLoadTask task = new ImageHeightmapLoadTask(loader.get(), imageName);
+            AsyncCommandBuilder.wrap(task, player)
+                .registerWithSupervisor(worldEdit.getSupervisor(), "Loading asset " + imageName)
+                .setDelayMessage(TranslatableComponent.of("worldedit.asset.load.loading"))
+                .setWorkingMessage(TranslatableComponent.of("worldedit.asset.load.still-loading"))
+                .onSuccess(TranslatableComponent.of("worldedit.brush.image.equip", TextComponent.of((int) radius)), heightmap -> {
+                    tool.setSize(radius);
+                    tool.setBrush(new ImageHeightmapBrush(heightmap, intensity, erase, flatten, randomize), "worldedit.brush.image");
+                })
+                .onFailure(TranslatableComponent.of("worldedit.asset.load.failed"), worldEdit.getPlatformManager().getPlatformCommandManager().getExceptionConverter())
+                .buildAndExec(worldEdit.getExecutorService());
+        } else {
+            AsyncCommandBuilder.wrap((Callable<Component>) () -> {
+                List<Path> imageNames = worldEdit.getAssetLoaders().getFilesForAsset(ImageHeightmap.class);
+                TextComponent.Builder builder = TextComponent.builder();
+                int i = 0;
+                for (Path path : imageNames) {
+                    builder.append(TextComponent.of(MoreFiles.getNameWithoutExtension(path), i % 2 == 0 ? TextColor.GRAY : TextColor.WHITE));
+                    if (i <= imageNames.size()) {
+                        builder.append(TextComponent.of(", "));
+                    }
+                    i++;
+                }
+                return TranslatableComponent.of("worldedit.brush.image.unknown", TextComponent.of(imageName), builder.build());
+            }, player)
+                .registerWithSupervisor(worldEdit.getSupervisor(), "Image brush list.")
+                .onSuccess((Component) null, player::print)
+                .onFailure((Component) null, worldEdit.getPlatformManager().getPlatformCommandManager().getExceptionConverter())
+                .buildAndExec(worldEdit.getExecutorService());
         }
     }
 
@@ -526,5 +532,21 @@ public class BrushCommands {
         tool.setBrush(new OperationFactoryBrush(factory, shape, session), permission);
 
         player.printInfo(TranslatableComponent.of("worldedit.brush.operation.equip", TextComponent.of(factory.toString())));
+    }
+
+    private static class ImageHeightmapLoadTask implements Callable<ImageHeightmap> {
+
+        private final String imageName;
+        private final AssetLoader<ImageHeightmap> loader;
+
+        public ImageHeightmapLoadTask(AssetLoader<ImageHeightmap> loader, String imageName) {
+            this.loader = loader;
+            this.imageName = imageName;
+        }
+
+        @Override
+        public ImageHeightmap call() throws Exception {
+            return this.loader.getAsset(this.imageName);
+        }
     }
 }

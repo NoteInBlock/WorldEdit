@@ -30,11 +30,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Class to store the various asset loaders.
@@ -117,6 +119,24 @@ public class AssetLoaders {
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Gets an immutable list of all files that match a certain asset type.
+     *
+     * @param assetClass The asset class
+     * @return The list of files
+     */
+    public List<Path> getFilesForAsset(Class<?> assetClass) {
+        Set<String> extensions = this.assetLoaderMap.getOrDefault(assetClass, ImmutableMap.of()).keySet();
+
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(this.assetsDir, entry -> extensions.contains(MoreFiles.getFileExtension(entry)))) {
+            return ImmutableList.copyOf(stream);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return ImmutableList.of();
     }
 
     /**

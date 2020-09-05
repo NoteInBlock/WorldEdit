@@ -254,6 +254,10 @@
     "worldedit.session.cant-find-session": "Unable to find session for {0}",
     "worldedit.platform.no-file-dialog": "File dialogs are not supported in your environment.",
 
+    "worldedit.asset.load.loading": "(Please wait... loading asset.)",
+    "worldedit.asset.load.still-loading": "(Please wait... still loading asset.)",
+    "worldedit.asset.load.failed": "Failed to load asset",
+
     "worldedit.tool.max-block-changes": "Max blocks change limit reached.",
     "worldedit.tool.no-block": "No block in sight!",
     "worldedit.tool.repl.equip": "Block replacer tool bound to {0}.",
