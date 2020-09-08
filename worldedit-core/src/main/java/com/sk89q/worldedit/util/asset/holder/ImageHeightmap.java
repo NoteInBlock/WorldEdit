@@ -22,6 +22,9 @@ package com.sk89q.worldedit.util.asset.holder;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
+/**
+ * Represents an image that acts as a heightmap.
+ */
 public class ImageHeightmap {
 
     private final BufferedImage image;
@@ -29,18 +32,30 @@ public class ImageHeightmap {
     private BufferedImage resizedImage;
     private int lastSize = -1;
 
+    /**
+     * Create a new image heightmap from an image.
+     *
+     * @param image The image
+     */
     public ImageHeightmap(BufferedImage image) {
         this.image = image;
     }
 
-    public double getHeightAt(int x, int y, int size, double intensity) {
+    /**
+     * Gets the height at the given position with scaling applied.
+     *
+     * @param x The x position
+     * @param y The y position
+     * @param size The size to sample the image as
+     * @return The height at the location
+     */
+    public double getHeightAt(int x, int y, int size) {
         if (size != lastSize || resizedImage == null) {
-            int diameter = size * 2 + 1;
-            resizedImage = new BufferedImage(diameter, diameter, 1);
+            resizedImage = new BufferedImage(size, size, 1);
             Graphics2D graphic = null;
             try {
                 graphic = resizedImage.createGraphics();
-                graphic.drawImage(this.image, 0, 0, diameter, diameter, null);
+                graphic.drawImage(this.image, 0, 0, size, size, null);
             } finally {
                 if (graphic != null) {
                     graphic.dispose();
@@ -61,7 +76,6 @@ public class ImageHeightmap {
         int green = rgb >>> 8 & 0xFF;
         int blue = rgb & 0xFF;
 
-        double scale = (red + blue + green) / 3D / 255D;
-        return scale * intensity;
+        return (red + blue + green) / 3D / 255D;
     }
 }

@@ -298,7 +298,6 @@ public class PlatformManager {
     @Subscribe
     public void handlePlatformReady(PlatformReadyEvent event) {
         choosePreferred();
-        worldEdit.getAssetLoaders().init();
         if (initialized.compareAndSet(false, true)) {
             worldEdit.getEventBus().post(new PlatformInitializeEvent());
         }

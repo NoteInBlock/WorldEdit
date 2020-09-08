@@ -61,7 +61,7 @@ public class ImageHeightmapBrush implements Brush {
                     continue;
                 }
 
-                double height = heightmap.getHeightAt(offX + size, offZ + size, size, intensity);
+                double height = heightmap.getHeightAt(offX + size, offZ + size, size * 2 + 1) * intensity;
                 // Add a bit of variation
                 if (randomize && random > 1 - height % 1) {
                     height += 1;

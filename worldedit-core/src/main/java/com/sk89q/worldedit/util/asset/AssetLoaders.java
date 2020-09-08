@@ -19,10 +19,10 @@
 
 package com.sk89q.worldedit.util.asset;
 
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import com.google.common.collect.Table;
 import com.google.common.io.MoreFiles;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.util.asset.holder.ImageHeightmap;
@@ -46,7 +46,7 @@ public class AssetLoaders {
     protected final Logger logger = LoggerFactory.getLogger(getClass());
 
     private final List<AssetLoader<?>> assetLoaders = Lists.newArrayList();
-    private final Map<Class<?>, Map<String, AssetLoader<?>>> assetLoaderMap = Maps.newHashMap();
+    private final Table<Class<?>, String, AssetLoader<?>> assetLoaderMap = HashBasedTable.create();
     private final WorldEdit worldEdit;
 
     private Path assetsDir;
@@ -66,27 +66,27 @@ public class AssetLoaders {
         try {
             Files.createDirectories(this.assetsDir);
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.warn("Failed to create asset directory", e);
         }
 
         registerAssetLoader(new ImageHeightmapLoader(worldEdit, this.assetsDir), ImageHeightmap.class);
     }
 
     public <T> void registerAssetLoader(AssetLoader<T> loader, Class<T> assetClass) {
-        this.assetLoaders.add(loader);
-        Map<String, AssetLoader<?>> classExtensionMap = assetLoaderMap.computeIfAbsent(assetClass, key -> Maps.newHashMap());
+        assetLoaders.add(loader);
         for (String extension : loader.getAllowedExtensions()) {
-            if (classExtensionMap.containsKey(extension)) {
+            if (assetLoaderMap.contains(assetClass, extension)) {
                 logger.warn(String.format(
-                    "Tried to register asset loader '%s' with extension '%s', but it is already registered to '%s'",
+                    "Tried to register asset loader '%s' with extension '%s' and asset class '%s', but it is already registered to '%s'",
                     loader.getClass().getName(),
                     extension,
-                    classExtensionMap.get(extension).getClass().getName()
+                    assetClass.getName(),
+                    assetLoaderMap.get(assetClass, extension).getClass().getName()
                 ));
                 continue;
             }
 
-            classExtensionMap.put(extension, loader);
+            assetLoaderMap.put(assetClass, extension, loader);
         }
     }
 
@@ -100,18 +100,18 @@ public class AssetLoaders {
      */
     @SuppressWarnings("unchecked")
     public <T> Optional<AssetLoader<T>> getAssetLoader(Class<T> assetClass, String filename) {
-        Map<String, AssetLoader<?>> internalLoaderMap = assetLoaderMap.getOrDefault(assetClass, ImmutableMap.of());
-        if (internalLoaderMap.isEmpty()) {
+        if (!assetLoaderMap.containsRow(assetClass)) {
             return Optional.empty();
         }
 
         Path directPath = this.assetsDir.resolve(filename);
 
-        if (Files.exists(directPath) && internalLoaderMap.containsKey(MoreFiles.getFileExtension(directPath))) {
-            return Optional.ofNullable((AssetLoader<T>) internalLoaderMap.get(MoreFiles.getFileExtension(directPath)));
+        String ext = MoreFiles.getFileExtension(directPath);
+        if (Files.exists(directPath) && assetLoaderMap.contains(assetClass, ext)) {
+            return Optional.ofNullable((AssetLoader<T>) assetLoaderMap.get(assetClass, ext));
         }
 
-        for (Map.Entry<String, AssetLoader<?>> entry : internalLoaderMap.entrySet()) {
+        for (Map.Entry<String, AssetLoader<?>> entry : assetLoaderMap.row(assetClass).entrySet()) {
             Path extensionPath = this.assetsDir.resolve(filename + "." + entry.getKey());
             if (Files.exists(extensionPath)) {
                 return Optional.ofNullable((AssetLoader<T>) entry.getValue());
@@ -128,15 +128,14 @@ public class AssetLoaders {
      * @return The list of files
      */
     public List<Path> getFilesForAsset(Class<?> assetClass) {
-        Set<String> extensions = this.assetLoaderMap.getOrDefault(assetClass, ImmutableMap.of()).keySet();
+        Set<String> extensions = this.assetLoaderMap.row(assetClass).keySet();
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(this.assetsDir, entry -> extensions.contains(MoreFiles.getFileExtension(entry)))) {
             return ImmutableList.copyOf(stream);
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.warn("Failed to get files for asset type " + assetClass.getName(), e);
+            return ImmutableList.of();
         }
-
-        return ImmutableList.of();
     }
 
     /**

@@ -24,7 +24,6 @@ import com.google.common.cache.CacheBuilder;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.util.io.file.FilenameException;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -45,11 +44,6 @@ public abstract class AssetLoader<T> {
     public AssetLoader(WorldEdit worldEdit, Path assetDir) {
         this.worldEdit = worldEdit;
         this.assetDir = assetDir;
-
-        try {
-            Files.createDirectories(assetDir);
-        } catch (IOException ignored) {
-        }
     }
 
     /**
@@ -70,7 +64,7 @@ public abstract class AssetLoader<T> {
             return cached;
         }
 
-        if (!Files.exists(this.assetDir) || !Files.isDirectory(this.assetDir)) {
+        if (!Files.isDirectory(this.assetDir)) {
             return null;
         }
 

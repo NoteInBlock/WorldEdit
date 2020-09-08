@@ -48,6 +48,6 @@ public class ImageHeightmapLoader extends AssetLoader<ImageHeightmap> {
 
     @Override
     public Set<String> getAllowedExtensions() {
-        return ImmutableSet.of("png", "jpg", "jpeg");
+        return ImmutableSet.copyOf(ImageIO.getReaderFileSuffixes());
     }
 }
